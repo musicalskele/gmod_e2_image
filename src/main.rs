@@ -11,6 +11,7 @@ use clap::{Parser, ValueEnum};
 enum EncodingMethod {
     BC1 = 4,
     RGB888 = 5
+    RGB888RLE = 21
 }
 
 impl EncodingMethod {
@@ -19,6 +20,7 @@ impl EncodingMethod {
         match self {
             EncodingMethod::BC1 => texpresso::Format::Bc1.compressed_size(width, height),
             EncodingMethod::RGB888 => width * height * 3,
+            EncodingMethod::RGB888RLE => width * height * 3,
         }
     }
 
@@ -53,12 +55,41 @@ impl EncodingMethod {
                 img.to_rgb8().as_bytes().to_vec()
 
             }
+            EncodingMethod::RGB888RLE => {
+
+                img.to_rgb8().as_bytes().rle_encode()
+
+            }
+
         }
     }
 
 }
 
+fn rle_encode(bytes: &[u8]) -> Vec<u8> {
+    let mut encoding;
 
+    if bytes.first().is_none() {
+        return vec![];
+    } else {
+        encoding = vec![*bytes.first().unwrap()];
+    }
+
+    let mut occurrences = 1;
+    
+    for byte in bytes.iter().skip(1) {
+        if byte == encoding.last().unwrap() && occurrences < 255 {
+            occurrences += 1;
+        } else {
+            encoding.extend(&[occurrences, *byte]);
+            occurrences = 1;
+        }
+    }
+
+    encoding.push(occurrences);
+
+    encoding
+} 
 
 
 
