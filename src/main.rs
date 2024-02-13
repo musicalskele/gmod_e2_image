@@ -10,7 +10,7 @@ use clap::{Parser, ValueEnum};
 #[derive(ValueEnum, Debug, Clone, Copy)]
 enum EncodingMethod {
     BC1 = 4,
-    RGB888 = 5
+    RGB888 = 5,
     RGB888RLE = 21
 }
 
