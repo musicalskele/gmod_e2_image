@@ -103,10 +103,10 @@ event chat(Player:entity, Message:string, _:number) {
                 Base64Stored = array()
                 CurrentState=1
                 break
-            case "config",
-                hideChat(1)
-                print(Get)
-                break
+            #case "config",
+            #    hideChat(1)
+            #    print(Get)
+            #    break
             default,
                 print("that is an unknown command: " + Get[1, string])
                 break
