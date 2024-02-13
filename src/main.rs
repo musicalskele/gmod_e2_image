@@ -57,7 +57,7 @@ impl EncodingMethod {
             }
             EncodingMethod::RGB888RLE => {
 
-                img.to_rgb8().as_bytes().rle_encode()
+                rle_encode(img.to_rgb8().as_bytes())
 
             }
 
