@@ -532,10 +532,10 @@ function array fQOI_DecodePixel() {
                 return array(0,ReconstructedPixel)
                 
             default,
-                print("Unrecognized 2bit opcode, that's impossible wtf")
+                print("Unrecognized 2bit opcode, that's literally impossible wtf")
                 break
     }
-    return array(69,69)
+    return array(0,vec4(0,0,0,0))
 }
 
 
