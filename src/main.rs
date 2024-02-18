@@ -27,8 +27,10 @@ impl EncodingMethod {
 
     pub fn encode(self, img: &DynamicImage) -> Vec<u8> {
 
-        let width: usize = img.width().try_into().unwrap();
+        let width: usize  = img.width().try_into().unwrap();
         let height: usize = img.height().try_into().unwrap();
+        let width32: u32  = img.width().try_into().unwrap();
+        let hegiht32: u32 = img.height().try_into().unwrap();
 
         match self {
             EncodingMethod::BC1 => {
@@ -57,7 +59,7 @@ impl EncodingMethod {
 
             },
             EncodingMethod::QOI => {
-                encode_to_vec(&img.to_rgb8().as_bytes, width, height).unwrap()
+                encode_to_vec(&img.to_rgb8().as_bytes, width32, height32).unwrap()
                 // still no idea if this works.
             }
             
