@@ -4,7 +4,7 @@ use std::{fs::File, io::Write, path::PathBuf};
 use base64::{engine::general_purpose, Engine};
 use image::{EncodableLayout, DynamicImage};
 use clap::{Parser, ValueEnum};
-use qoi::{encode_to_vec,required_buf_len};
+use qoi::{encode_to_vec,encode_max_len};
 
 
 #[derive(ValueEnum, Debug, Clone, Copy)]
@@ -30,7 +30,7 @@ impl EncodingMethod {
         let width: usize  = img.width().try_into().unwrap();
         let height: usize = img.height().try_into().unwrap();
         let width32: u32  = img.width().try_into().unwrap();
-        let hegiht32: u32 = img.height().try_into().unwrap();
+        let height32: u32 = img.height().try_into().unwrap();
 
         match self {
             EncodingMethod::BC1 => {
@@ -60,9 +60,9 @@ impl EncodingMethod {
 
             },
             EncodingMethod::QOI => {
-                let size = required_buf_len(&img.to_rgb8(), width32, height32)
+                let size = encode_max_len(width32, height32,3);
                 let mut encoded = vec![0u8; size];
-                encoded = encode_to_vec(&img.to_rgb8(), width32, height32)
+                encoded = encode_to_vec(&*img.to_rgb8(), width32, height32).expect("REASON");
                 encoded
                 // waaaaaa
             }
