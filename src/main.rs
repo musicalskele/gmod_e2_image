@@ -140,7 +140,7 @@ fn main() -> std::io::Result<()> {
     }
 
 
-    let output_file: PathBuf = PathBuf::from("output.txt", file_stem));
+    let output_file: PathBuf = PathBuf::from("output.txt");
 
     println!("Writing to file {:?}", output_file);
 
