@@ -22,6 +22,7 @@ impl EncodingMethod {
             EncodingMethod::BC1 => texpresso::Format::Bc1.compressed_size(width, height),
             EncodingMethod::RGB888 => width * height * 3,
             EncodingMethod::QOI => width * height, // closest i can get without fucking things up, i think
+        }
     }
 
     pub fn encode(self, img: &DynamicImage) -> Vec<u8> {
@@ -56,16 +57,13 @@ impl EncodingMethod {
 
             },
             EncodingMethod::QOI => {
-                let encoded = qoi::encode_to_vec(&img.to_rgb8().as_bytes, width, height).unwrap();
-                encoded
+                encode_to_vec(&img.to_rgb8().as_bytes, width, height).unwrap()
                 // still no idea if this works.
             }
             
         }
     }
-
 }
-
 /// Encode an image that gmod_e2_image.txt can decode in-game.
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
