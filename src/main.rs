@@ -54,7 +54,7 @@ impl EncodingMethod {
 
                 img.to_rgb8().as_bytes().to_vec()
 
-            }
+            },
             EncodingMethod::QOI => {
                 let encoded = qoi::encode_to_vec(&img.to_rgb8().as_bytes, width, height).unwrap();
                 encoded
