@@ -24,11 +24,25 @@
 @persist [Start, CurrentState,CPUMax,OPSMax]:number
 @persist [Base64Stream, Base64Charset]:string 
 @persist [CONS_ONE_THIRD,CONS_TWO_THIRDS,CONS_HALF]:number
+@persist [DecodedArray]:array
 @persist ConfigsTable:table
 @persist Owner:entity
 @persist Base64Stored:array
 @persist CmdPrefix:string
+@persist SeenPixels:array
+@persist RunLength:number
+@persist Index:number
+@persist [DeltaR,DeltaG,DeltaB]:number
+@persist [DRDG,DRDB]:number
+@persist SeenPixels:array
+@persist CurrentByte:number
+@persist [PrevPixel,Color]:vector4
+@persist ColorHash:number
+@persist ByteIndex:number
 
+
+
+PixelsProcessedTotal=0
 if(first() || dupefinished()) {
     ConfigsTable=table(
     "CPUMax"          = 10000, 
@@ -41,7 +55,6 @@ if(first() || dupefinished()) {
     OPSMax          = 11000   # ~10k
     CmdPrefix       = ">"     # command prefix
     ResetDuringInit = 1       #
-
   #--------|CONSTANTS|--------#
     CONS_ONE_THIRD  = 1/3
     CONS_TWO_THIRDS = 2/3     # not actually sure if these help with efficiency. may remove in future.
@@ -56,8 +69,7 @@ if(first() || dupefinished()) {
     CurrentState    =0
 
   #--------|IMAGE DATA|--------#
-    # Imagedata can either be:
-
+    # Imagedata can either be:    
     # included from a seperate file (recommended)
     #include "imagedata"
     
@@ -91,7 +103,8 @@ event chat(Player:entity, Message:string, _:number) {
                     "RGB565",
                     "YCbCr",
                     "BC1",
-                    "RGB888"
+                    "RGB888",
+                    "QOI"
                 )[Format + 1, string]
                 
                 print("E2 Image Display by Potat05 & musicalskele - Currently Displaying image of size " + floor(Base64Stream:length() / 1024) + "KiB or "+round(Base64Stream:length() / 1048576,3)+"MiB, with dimensions " + Width + ":" + Height + " size, with the " + FormatString + "format.")
@@ -195,7 +208,17 @@ function number b64_next() {
     
 }
 
-function vector b64_next_triple() {
+
+
+
+
+
+
+
+
+
+#[
+function number b64_next_triple() {
     
     if(Base64Stored:count() == 0) {
         
@@ -214,12 +237,60 @@ function vector b64_next_triple() {
         
     }
     
-    return vec(Base64Stored:shiftNumber(),Base64Stored:shiftNumber(),Base64Stored:shiftNumber())
+    return Base64Stored:shiftNumber()
     
 }
 
 
+
+function vector b64_next_triple() {
+    
+    if(Base64Stored:count() == 0) {
+        
+        local N =
+            bShl(Base64Charset:find(Base64Stream[Base64CharIndex]) - 1, 18) +
+            bShl(Base64Charset:find(Base64Stream[Base64CharIndex + 1]) - 1, 12) +
+            bShl(Base64Charset:find(Base64Stream[Base64CharIndex + 2]) - 1, 6) +
+            (Base64Charset:find(Base64Stream[Base64CharIndex + 3]) - 1)
+        
+        
+        Base64Stored:pushNumber(bAnd(bShr(N, 16), 0xFF))
+        Base64Stored:pushNumber(bAnd(bShr(N, 8), 0xFF))
+        Base64Stored:pushNumber(bAnd(N, 0xFF))
+        
+        Base64CharIndex += 4
+        
+    }
+    R=Base64Stored:shiftNumber()
+    G=Base64Stored:shiftNumber()
+    B=Base64Stored:shiftNumber()
+    return vec(B,R,G)
+    
+}
+]#
+
+
   #-|PIXEL & INCREMENT FUNCT.|-#
+
+
+function number incrementNPixels(N:number) {
+    for (I = 1, N) {
+        
+  
+    X++
+    if(X >= Width) {
+        X = 0
+        Y++
+        if(Y >= Height) {
+            Y = 0
+            return 1
+        }
+    }
+    }
+    return 0
+}
+
+
 function number incrementSingularPixel() {
     X++
     if(X >= Width) {
@@ -233,7 +304,33 @@ function number incrementSingularPixel() {
     
     return 0
 }
+function number incrementPixelCheck() {
+    let XTemp=X
+    let YTemp=Y
+    XTemp++
+    if(XTemp >= Width) {
+        XTemp = 0
+        YTemp++
+        if(YTemp >= Height) {
+            YTemp = 0
+            return 1
+        }
+    }
+    
+    return 0
+}
 
+#["
+function incrementSingularPixel() {
+    X++
+    if (X >= Width) {
+        X = 0
+        Y++
+        return (Y >= Height ? 1 : 0)
+    }
+    return 0
+}
+]#
 
 function number incrementBlock(Size:number) {
     X += Size
@@ -275,13 +372,179 @@ function vector decode565(Color:number) {
     )
 }
 
-function vector lerpt(A:vector, B:vector, T:number) {
-    return vec(
-        A:x()+ (B:x()-A:x())* T,
-        A:y()+ (B:y()-A:y())* T,
-        A:z()+ (B:z()-A:z())* T
-    )
+
+  #------|QOI RELATED FUNCTIONS AND VARIABLES|------#
+
+const QOI_HEADER_SIZE = 14
+const QOI_END_MARKER = array(0, 0, 0, 0, 0, 0, 0, 1)
+
+const QOI_END_MARKER_SIZE = QOI_END_MARKER:count()
+
+
+const QOI_OP_RUN   = 0xC0
+const QOI_OP_INDEX = 0x00
+const QOI_OP_DIFF  = 0x40
+const QOI_OP_LUMA  = 0x80
+const QOI_OP_RGB   = 0xFE
+const QOI_OP_RGBA  = 0xFF
+
+const QOI_CHUNK_MASK = 0xC0
+const QOI_RUN_LENGTH = 0x3F
+const QOI_INDEX      = 0x3F
+
+const QOI_INDEX_MASK = 0x30
+const QOI_DIFF_RED = 0x03
+const QOI_DIFF_GREEN = 0x0F
+const QOI_DIFF_BLUE = 0x3C
+
+const QOI_LUMA_MASK = 0xF0
+const QOI_LUMA_GREEN = 0x3F
+const QOI_LUMA_DRDG = 0xF0
+const QOI_LUMA_DBDG = 0x0F
+      PixelData     = vec4(0,0,0,0)
+
+
+
+
+function number readByte() {return b64_next()}
+        
+function number read32() {
+    return (b64_next() << 24 || b64_next() << 16 || b64_next() << 8 || b64_next() << 0) 
+    }
+
+function fQOI_DecodeHeader() {
+
+    HeaderMagic=read32()
+    if (HeaderMagic != 0x716F6966) {
+        print("Invalid QOI Format, decoding may not work!")
+    }
+
+    ReadWidth      = read32()
+    ReadHeight     = read32()
+    ReadChannels   = readByte()
+    ReadColorSpace = readByte()
+
+    print("QOI File Header Dump:")
+    print("Width:"+ReadWidth+" Height:"+ReadHeight+" Channels:"+ReadChannels+" Colorspace:"+ReadColorSpace )
+
+
 }
+
+SeenPixels=array(
+                vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),
+                vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),
+                vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),
+                vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),
+                vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),
+                vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),
+                vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),
+                vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0)
+)
+
+
+PrevPixel          = vec4(0,0,0,255)
+IndexCount         = 0
+Pixels2Return      = array()
+ReturnedPixelIndex = 0
+function void pushPixel(Color:vector4) {
+    ReturnedPixelIndex++
+    let R = Color:x()
+    let G = Color:y()
+    let B = Color:z()
+    PrevPixel   = Color
+    HashedColor = (R * 3 + G * 5 + B * 7 + 53) % 64
+    SeenPixels:setVector4(HashedColor,Color)
+    #2805 is 255*11, we assume all pixels are solid, mod 2805 is 53
+    Pixels2Return:setVector(ReturnedPixelIndex,vec(R,G,B))
+    
+}
+ByteIndex=0
+function array fQOI_DecodePixel() {
+    # Check 8 bit opcodes
+    CurrentByte = readByte()
+    ReturnedPixelIndex = 0
+    ByteIndex++
+    RunLength = 1
+    
+    switch (CurrentByte) {
+    case QOI_OP_RGB,
+        let R = readByte()
+        let G = readByte()
+        let B = readByte()
+        # Always return 255 for Alpha
+        pushPixel(vec4(R,G,B,0xFF))
+        return array(0,PrevPixel)
+    case QOI_OP_RGBA,
+        let R = readByte()
+        let G = readByte()
+        let B = readByte()
+        let A = readByte()
+        # Also always return 255 for Alpha, it's pretty much useless..
+        pushPixel(vec4(R,G,B,0xFF))
+        return array(0,PrevPixel)
+    default,
+        break
+    }
+
+    
+    # Check 2 bit opcodes
+
+    switch (CurrentByte && QOI_CHUNK_MASK) {
+            case QOI_OP_RUN,
+                RunLength = (CurrentByte && 0b00111111)+1
+                for (I = 1, RunLength) {
+                    pushPixel(PrevPixel)
+                }
+                return array(RunLength,PrevPixel)
+                
+            case QOI_OP_INDEX,
+                pushPixel(SeenPixels[CurrentByte,vector4])
+                return array(0,PrevPixel)
+                
+            case QOI_OP_DIFF,
+                DeltaR = ((CurrentByte && 0b00110000) >> 4) - 2
+                DeltaG = ((CurrentByte && 0b00001100) >> 2) - 2
+                DeltaB = ((CurrentByte && 0b00000011)     ) - 2
+
+                let ReconstructedPixel = vec4(
+                    PrevPixel:x()+DeltaR,
+                    PrevPixel:y()+DeltaG,
+                    PrevPixel:z()+DeltaB,
+                    0xFF)
+                    
+                pushPixel(ReconstructedPixel)
+                return array(0,ReconstructedPixel)
+
+            case QOI_OP_LUMA,
+                CurrentByte2 = readByte()
+
+                DeltaG = ((CurrentByte  && 0b00111111)     ) - 32
+                DRDG   = ((CurrentByte2 && 0b11110000) >> 4) - 8
+                DBDG   = ((CurrentByte2 && 0b00001111)     ) - 8
+
+                let ReconstructedPixel = vec4(
+                    PrevPixel:x()+DeltaG+DRDG,
+                    PrevPixel:y()+DeltaG     ,
+                    PrevPixel:z()+DeltaG+DBDG,
+                    0xFF)
+                    
+                pushPixel(ReconstructedPixel)
+                return array(0,ReconstructedPixel)
+                
+            default,
+                print("Unrecognized 2bit opcode, that's impossible wtf")
+                break
+    }
+    return array(69,69)
+}
+
+
+
+
+
+
+
+
 
   #-----|NEXTPIXELS FUNC.|-----#
 function number nextPixels() {
@@ -327,12 +590,12 @@ function number nextPixels() {
             local Palette = (Color1Value > Color2Value) ? array(
                 Color1,
                 Color2,
-                lerpt(Color1, Color2, CONS_ONE_THIRD),
-                lerpt(Color1, Color2, CONS_TWO_THIRDS)
+                lerp(Color1, Color2, CONS_ONE_THIRD),
+                lerp(Color1, Color2, CONS_TWO_THIRDS)
             ) : array(
                 Color1,
                 Color2,
-                lerpt(Color1, Color2, CONS_HALF),
+                lerp(Color1, Color2, CONS_HALF),
                 vec(0, 0, 0)
             )
 			
@@ -348,11 +611,26 @@ function number nextPixels() {
                 }
             }
             return incrementBlock(4)
-        
         case 5,
           #---------|RGB-888|---------#
-            DigiScreen:dsSetPixel(X, Y, b64_next_triple())
+            DigiScreen:dsSetPixel(X, Y, vec(b64_next(),b64_next(),b64_next()))
             return incrementSingularPixel()
+            
+        case 6,
+          #-----------|QOI|-----------#
+          ReturnedPixels=fQOI_DecodePixel()
+          XTemp=X
+          YTemp=Y
+          for (I = 1, ReturnedPixels[1,number]+1) {
+            Vec3Color=vec(ReturnedPixels[2,vector4])
+            DigiScreen:dsSetPixel(XTemp, YTemp,Vec3Color)
+            XTemp++
+            if((XTemp) >= Width) {
+                XTemp = 0
+                YTemp++
+            }}
+          return incrementNPixels(RunLength)
+          
         default,
             # handle unknown format or other cases
             return 0
@@ -360,9 +638,27 @@ function number nextPixels() {
 }
 
 
-  #-----|MAIN LOOP TICK|-----#
 
+
+
+
+
+
+
+
+
+
+
+DecodedStr=""
+DecodedArray=array()
+
+  #-----|MAIN LOOP TICK|-----#
+LastI=0
+CurrentI=1
 Start = 0
+StartFirst = 0
+CurrentRatio=69
+LastRatio=1
 event tick(){
    
     switch(CurrentState) {
@@ -381,26 +677,13 @@ event tick(){
                 "RGB565",
                 "YCbCr",
                 "BC1",
-                "RGB888",
-                "Placeholder0x06",
-                "Placeholder0x07",
-                "Placeholder0x08",
-                "Placeholder0x09",
-                "Placeholder0x0A",
-                "Placeholder0x0B",
-                "Placeholder0x0C",
-                "Placeholder0x0D",
-                "Placeholder0x0E",
-                "Placeholder0x0F",
-                "Placeholder0x10",
-                "Placeholder0x11",
-                "Placeholder0x12",
-                "Placeholder0x13",
-                "Placeholder0x14",
-                "Placeholder0x15",
-                "RGB888 RLE v1",
+                "RGB888"
                 )[Format + 1, string]
             print("E2 Image Display Component by Potat05 & musicalskele - Displaying image of size " + floor(Base64Stream:length() / 1024) + "KiB or "+round(Base64Stream:length() / 1048576,3)+"MiB, with dimensions " + Width + ":" + Height + " size, with the " + FormatString + "format.")
+            if (Format == 6) {
+                fQOI_DecodeHeader()
+            }
+
             CurrentState = 2
         break
         
@@ -419,7 +702,7 @@ event tick(){
         break
             
         case 4, break
+
             
-}
-}
+}}
 
