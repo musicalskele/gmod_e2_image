@@ -59,6 +59,7 @@ impl EncodingMethod {
             EncodingMethod::QOI => {
                 let encoded = encode_to_vec(&img.to_rgb8(), width, height).unwrap();
                 encoded
+                // no idea if this works.
             }
             
         }
@@ -140,8 +141,8 @@ fn main() -> std::io::Result<()> {
     }
 
 
-
-    let output_file: PathBuf = PathBuf::from("output.txt");
+    let file_stem = cli.img_path.file_stem().unwrap_or_default();
+    let output_file: PathBuf = PathBuf::from(format!("{}_b64.txt", file_stem));
 
     println!("Writing to file {:?}", output_file);
 

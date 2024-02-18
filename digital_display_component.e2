@@ -1,20 +1,25 @@
 #[
-
-        E2 Image Viewer - Potat05 & musicalskele                   
-
-                                                             
-  Be cautious when loading large image data (>=250KiB)       
-    as it may lead to crashes on lower-end systems.          
-                                                             
-                                                             
-  If you encounter issues hosting the server, use the        
- "wire_expression2_unlimited 1" console command to           
-        disable the E2 ops limit temporarily.                
-                                                             
-
+	    E2 Image Viewer - Potat05 & musicalskele    
+              E2 QOI Decoder - musicalskele                     
+                                                                                     
+   Be cautious when loading large image data (>=250KiB)       
+      as it may lead to crashes on lower-end systems.          
+                                                                                     
+                                                                                     
+  If you encounter issues rendering the image, use the        
+    "wire_expression2_unlimited 1" console command to           
+          disable the E2 ops limit temporarily.                
+                                                                                     
+   (Last Update: February 18, 2024)
+   Supported Formats:
+   RGB888, BC1, QOI
+   Partially-Supported Formats:
+   RGB223, RGB565, YCbCr (untested)
+   Using QOI is heavily recommended                                          
 ]#
 
-@name skeles advanced display component 
+
+@name skele's advanced display component 
 
 @strict
 
