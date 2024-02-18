@@ -21,8 +21,7 @@ impl EncodingMethod {
         match self {
             EncodingMethod::BC1 => texpresso::Format::Bc1.compressed_size(width, height),
             EncodingMethod::RGB888 => width * height * 3,
-            EncodingMethod::QOI => width * height * *0.35, // average compression rate, maybe, i made it up
-        }
+            EncodingMethod::QOI => width * height, // closest i can get without fucking things up, i think
     }
 
     pub fn encode(self, img: &DynamicImage) -> Vec<u8> {
@@ -57,9 +56,9 @@ impl EncodingMethod {
 
             }
             EncodingMethod::QOI => {
-                let encoded = encode_to_vec(&img.to_rgb8(), width, height).unwrap();
+                let encoded = qoi::encode_to_vec(&img.to_rgb8().as_bytes, width, height).unwrap();
                 encoded
-                // no idea if this works.
+                // still no idea if this works.
             }
             
         }
@@ -141,8 +140,7 @@ fn main() -> std::io::Result<()> {
     }
 
 
-    let file_stem = cli.img_path.file_stem().unwrap_or_default();
-    let output_file: PathBuf = PathBuf::from(format!("{}_b64.txt", file_stem));
+    let output_file: PathBuf = PathBuf::from("output.txt", file_stem));
 
     println!("Writing to file {:?}", output_file);
 

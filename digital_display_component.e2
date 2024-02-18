@@ -12,9 +12,10 @@
                                                                                      
    (Last Update: February 18, 2024)
    Supported Formats:
-   RGB888, BC1, QOI
+   RGB888, BC1
    Partially-Supported Formats:
    RGB223, RGB565, YCbCr (untested)
+   QOI (heavily tested)
    Using QOI is heavily recommended                                          
 ]#
 
