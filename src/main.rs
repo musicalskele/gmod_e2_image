@@ -4,7 +4,7 @@ use std::{fs::File, io::Write, path::PathBuf};
 use base64::{engine::general_purpose, Engine};
 use image::{EncodableLayout, DynamicImage};
 use clap::{Parser, ValueEnum};
-use qoi::{encode_to_vec};
+use qoi::{encode_to_vec,required_buf_len};
 
 
 #[derive(ValueEnum, Debug, Clone, Copy)]
@@ -55,12 +55,15 @@ impl EncodingMethod {
             },
             EncodingMethod::RGB888 => {
 
+
                 img.to_rgb8().as_bytes().to_vec()
 
             },
             EncodingMethod::QOI => {
-                encode_to_vec(&img.to_rgb8().as_bytes, width32, height32).unwrap()
-                // still no idea if this works.
+                let size = required_buf_len(&img.to_rgb8().as_bytes, width32, height32)
+                let mut encoded = vec![0u8; size];
+                encode_to_vec(&img.to_rgb8().as_bytes, width32, height32)
+                // waaaaaa
             }
             
         }
