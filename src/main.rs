@@ -60,9 +60,10 @@ impl EncodingMethod {
 
             },
             EncodingMethod::QOI => {
-                let size = required_buf_len(&img.to_rgb8().as_bytes, width32, height32)
+                let size = required_buf_len(&img.as_bytes, width32, height32)
                 let mut encoded = vec![0u8; size];
-                encode_to_vec(&img.to_rgb8(), width32, height32)
+                encoded = encode_to_vec(&img.to_rgb8(), width32, height32)
+                encoded
                 // waaaaaa
             }
             
