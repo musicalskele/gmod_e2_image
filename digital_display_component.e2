@@ -39,16 +39,41 @@
 @persist RunLength:number
 @persist Index:number
 @persist [DeltaR,DeltaG,DeltaB]:number
-@persist [DRDG,DRDB]:number
+@persist [DRDG,DBDG]:number
 @persist SeenPixels:array
 @persist CurrentByte:number
 @persist [PrevPixel,Color]:vector4
-@persist ColorHash:number
-@persist ByteIndex:number
+@persist HashedColor:number
+
+    const QOI_HEADER_SIZE = 14
+    const QOI_END_MARKER = array(0, 0, 0, 0, 0, 0, 0, 1)
+
+    const QOI_END_MARKER_SIZE = QOI_END_MARKER:count()
+
+
+    const QOI_OP_RUN   = 0xC0
+    const QOI_OP_INDEX = 0x00
+    const QOI_OP_DIFF  = 0x40
+    const QOI_OP_LUMA  = 0x80
+    const QOI_OP_RGB   = 0xFE
+    const QOI_OP_RGBA  = 0xFF
+
+    const QOI_CHUNK_MASK = 0xC0
+    const QOI_RUN_LENGTH = 0x3F
+    const QOI_INDEX      = 0x3F
+
+    const QOI_INDEX_MASK = 0x30
+    const QOI_DIFF_RED = 0x03
+    const QOI_DIFF_GREEN = 0x0F
+    const QOI_DIFF_BLUE = 0x3C
+
+    const QOI_LUMA_MASK = 0xF0
+    const QOI_LUMA_GREEN = 0x3F
+    const QOI_LUMA_DRDG = 0xF0
+    const QOI_LUMA_DBDG = 0x0F
 
 
 
-PixelsProcessedTotal=0
 if(first() || dupefinished()) {
     ConfigsTable=table(
     "CPUMax"          = 10000, 
@@ -65,7 +90,6 @@ if(first() || dupefinished()) {
     CONS_ONE_THIRD  = 1/3
     CONS_TWO_THIRDS = 2/3     # not actually sure if these help with efficiency. may remove in future.
     CONS_HALF       = 1/2
-
   #----------|MISC.|----------#
     Width           =0
     Height          =0
@@ -73,16 +97,18 @@ if(first() || dupefinished()) {
     Y               =0
     Format          =0
     CurrentState    =0
+  #-----------|QOI|-----------#
 
   #--------|IMAGE DATA|--------#
+
     # Imagedata can either be:    
-    # included from a seperate file (recommended)
+    # included from a seperate file (heavily recommended)
     #include "imagedata"
     
     # an input
     # Base64Stream = ImageStream
 
-    # pasted directly here (extremely laggy for files >200kb)
+    # or pasted directly here (do not attempt for files >100kb)
     # Base64Stream =
 
   #----------------------------#
@@ -91,7 +117,10 @@ if(first() || dupefinished()) {
 
 
 }
+
+
   #------|CHAT COMMANDS!|------#
+
 Owner = owner()
 
 event chat(Player:entity, Message:string, _:number) {
@@ -215,83 +244,19 @@ function number b64_next() {
 }
 
 
-
-
-
-
-
-
-
-
-#[
-function number b64_next_triple() {
-    
-    if(Base64Stored:count() == 0) {
-        
-        local N =
-            bShl(Base64Charset:find(Base64Stream[Base64CharIndex]) - 1, 18) +
-            bShl(Base64Charset:find(Base64Stream[Base64CharIndex + 1]) - 1, 12) +
-            bShl(Base64Charset:find(Base64Stream[Base64CharIndex + 2]) - 1, 6) +
-            (Base64Charset:find(Base64Stream[Base64CharIndex + 3]) - 1)
-        
-        
-        Base64Stored:pushNumber(bAnd(bShr(N, 16), 0xFF))
-        Base64Stored:pushNumber(bAnd(bShr(N, 8), 0xFF))
-        Base64Stored:pushNumber(bAnd(N, 0xFF))
-        
-        Base64CharIndex += 4
-        
-    }
-    
-    return Base64Stored:shiftNumber()
-    
-}
-
-
-
-function vector b64_next_triple() {
-    
-    if(Base64Stored:count() == 0) {
-        
-        local N =
-            bShl(Base64Charset:find(Base64Stream[Base64CharIndex]) - 1, 18) +
-            bShl(Base64Charset:find(Base64Stream[Base64CharIndex + 1]) - 1, 12) +
-            bShl(Base64Charset:find(Base64Stream[Base64CharIndex + 2]) - 1, 6) +
-            (Base64Charset:find(Base64Stream[Base64CharIndex + 3]) - 1)
-        
-        
-        Base64Stored:pushNumber(bAnd(bShr(N, 16), 0xFF))
-        Base64Stored:pushNumber(bAnd(bShr(N, 8), 0xFF))
-        Base64Stored:pushNumber(bAnd(N, 0xFF))
-        
-        Base64CharIndex += 4
-        
-    }
-    R=Base64Stored:shiftNumber()
-    G=Base64Stored:shiftNumber()
-    B=Base64Stored:shiftNumber()
-    return vec(B,R,G)
-    
-}
-]#
-
-
   #-|PIXEL & INCREMENT FUNCT.|-#
-
 
 function number incrementNPixels(N:number) {
     for (I = 1, N) {
-        
-  
-    X++
-    if(X >= Width) {
-        X = 0
-        Y++
-        if(Y >= Height) {
-            Y = 0
-            return 1
+        X++
+        if(X >= Width) {
+            X = 0
+            Y++
+            if(Y >= Height) {
+                Y = 0
+                return 1
+            }
         }
-    }
     }
     return 0
 }
@@ -310,6 +275,7 @@ function number incrementSingularPixel() {
     
     return 0
 }
+
 function number incrementPixelCheck() {
     let XTemp=X
     let YTemp=Y
@@ -325,18 +291,6 @@ function number incrementPixelCheck() {
     
     return 0
 }
-
-#["
-function incrementSingularPixel() {
-    X++
-    if (X >= Width) {
-        X = 0
-        Y++
-        return (Y >= Height ? 1 : 0)
-    }
-    return 0
-}
-]#
 
 function number incrementBlock(Size:number) {
     X += Size
@@ -372,45 +326,14 @@ function number dequantize(Value:number, Bits:number) {
 
 function vector decode565(Color:number) {
     return vec(
-        dequantize(bShr(bAnd(Color, 0b1111100000000000), 11), 5),
-        dequantize(bShr(bAnd(Color, 0b0000011111100000), 5), 6),
-        dequantize(bAnd(Color, 0b0000000000011111), 5)
+        dequantize((Color & 0b1111100000000000) >> 11, 5),
+        dequantize((Color & 0b0000011111100000) >> 5, 6 ),
+        dequantize(Color & 0b0000000000011111, 5        )
     )
 }
 
 
   #------|QOI RELATED FUNCTIONS AND VARIABLES|------#
-
-const QOI_HEADER_SIZE = 14
-const QOI_END_MARKER = array(0, 0, 0, 0, 0, 0, 0, 1)
-
-const QOI_END_MARKER_SIZE = QOI_END_MARKER:count()
-
-
-const QOI_OP_RUN   = 0xC0
-const QOI_OP_INDEX = 0x00
-const QOI_OP_DIFF  = 0x40
-const QOI_OP_LUMA  = 0x80
-const QOI_OP_RGB   = 0xFE
-const QOI_OP_RGBA  = 0xFF
-
-const QOI_CHUNK_MASK = 0xC0
-const QOI_RUN_LENGTH = 0x3F
-const QOI_INDEX      = 0x3F
-
-const QOI_INDEX_MASK = 0x30
-const QOI_DIFF_RED = 0x03
-const QOI_DIFF_GREEN = 0x0F
-const QOI_DIFF_BLUE = 0x3C
-
-const QOI_LUMA_MASK = 0xF0
-const QOI_LUMA_GREEN = 0x3F
-const QOI_LUMA_DRDG = 0xF0
-const QOI_LUMA_DBDG = 0x0F
-      PixelData     = vec4(0,0,0,0)
-
-
-
 
 function number readByte() {return b64_next()}
         
@@ -422,7 +345,7 @@ function fQOI_DecodeHeader() {
 
     HeaderMagic=read32()
     if (HeaderMagic != 0x716F6966) {
-        print("Invalid QOI Format, decoding may not work!")
+        printColor(vec(255,0,0),"Invalid QOI Format, decoding may not work!")
     }
 
     ReadWidth      = read32()
@@ -432,10 +355,9 @@ function fQOI_DecodeHeader() {
 
     print("QOI File Header Dump:")
     print("Width:"+ReadWidth+" Height:"+ReadHeight+" Channels:"+ReadChannels+" Colorspace:"+ReadColorSpace )
-
-
 }
 
+# is there a better way to do this? looks so ugly.
 SeenPixels=array(
                 vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),
                 vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),
@@ -447,16 +369,17 @@ SeenPixels=array(
                 vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0),vec4(0,0,0,0)
 )
 
-
 PrevPixel          = vec4(0,0,0,255)
-IndexCount         = 0
 Pixels2Return      = array()
 ReturnedPixelIndex = 0
+
 function void pushPixel(Color:vector4) {
     ReturnedPixelIndex++
+    # Increase the Index
     let R = Color:x()
     let G = Color:y()
     let B = Color:z()
+    # Declare R,G,B
     PrevPixel   = Color
     HashedColor = (R * 3 + G * 5 + B * 7 + 53) % 64
     SeenPixels:setVector4(HashedColor,Color)
@@ -464,14 +387,16 @@ function void pushPixel(Color:vector4) {
     Pixels2Return:setVector(ReturnedPixelIndex,vec(R,G,B))
     
 }
-ByteIndex=0
+
 function array fQOI_DecodePixel() {
-    # Check 8 bit opcodes
+    # Read a Byte
     CurrentByte = readByte()
+    
+    # Reset PixelIndex and RunLength 
     ReturnedPixelIndex = 0
-    ByteIndex++
     RunLength = 1
     
+    # Check 8 bit opcodes
     switch (CurrentByte) {
     case QOI_OP_RGB,
         let R = readByte()
@@ -492,9 +417,7 @@ function array fQOI_DecodePixel() {
         break
     }
 
-    
     # Check 2 bit opcodes
-
     switch (CurrentByte && QOI_CHUNK_MASK) {
             case QOI_OP_RUN,
                 RunLength = (CurrentByte && 0b00111111)+1
@@ -543,14 +466,6 @@ function array fQOI_DecodePixel() {
     }
     return array(0,vec4(0,0,0,0))
 }
-
-
-
-
-
-
-
-
 
   #-----|NEXTPIXELS FUNC.|-----#
 function number nextPixels() {
@@ -617,6 +532,7 @@ function number nextPixels() {
                 }
             }
             return incrementBlock(4)
+
         case 5,
           #---------|RGB-888|---------#
             DigiScreen:dsSetPixel(X, Y, vec(b64_next(),b64_next(),b64_next()))
@@ -624,18 +540,19 @@ function number nextPixels() {
             
         case 6,
           #-----------|QOI|-----------#
-          ReturnedPixels=fQOI_DecodePixel()
-          XTemp=X
-          YTemp=Y
-          for (I = 1, ReturnedPixels[1,number]+1) {
-            Vec3Color=vec(ReturnedPixels[2,vector4])
-            DigiScreen:dsSetPixel(XTemp, YTemp,Vec3Color)
-            XTemp++
-            if((XTemp) >= Width) {
-                XTemp = 0
-                YTemp++
-            }}
-          return incrementNPixels(RunLength)
+            ReturnedPixels=fQOI_DecodePixel()
+            XTemp=X
+            YTemp=Y
+            for (I = 1, ReturnedPixels[1,number]+1) {
+                Vec3Color=vec(ReturnedPixels[2,vector4])
+                DigiScreen:dsSetPixel(XTemp, YTemp,Vec3Color)
+                XTemp++
+                if((XTemp) >= Width) {
+                    XTemp = 0
+                    YTemp++
+                }
+            }
+            return incrementNPixels(RunLength)
           
         default,
             # handle unknown format or other cases
@@ -643,28 +560,8 @@ function number nextPixels() {
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-DecodedStr=""
-DecodedArray=array()
-
   #-----|MAIN LOOP TICK|-----#
-LastI=0
-CurrentI=1
 Start = 0
-StartFirst = 0
-CurrentRatio=69
-LastRatio=1
 event tick(){
    
     switch(CurrentState) {
