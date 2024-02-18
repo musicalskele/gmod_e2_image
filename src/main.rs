@@ -60,12 +60,13 @@ impl EncodingMethod {
 
             },
             EncodingMethod::QOI => {
-                let size = encode_max_len(width32, height32,3);
-                let mut encoded = vec![0u8; size];
-                encoded = encode_to_vec(&*img.to_rgb8(), width32, height32).expect("REASON");
+                let encoded_result = encode_to_vec(img.to_rgb8().as_bytes().to_vec(), width32, height32);
+            
+                // Unwrap the result, panicking if there's an error
+                let encoded = encoded_result.unwrap();
                 encoded
-                // waaaaaa
             }
+            
             
         }
     }
